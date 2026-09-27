@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<title>沉井下沉计算器</title>
+<style>
+:root {
+  --blue: #007aff;
+  --blue-press: #0062cc;
+  --red: #ff3b30;
+  --bg: #f2f2f7;
+  --text: #1c1c1e;
+  --text2: #8e8e93;
+  --sep: rgba(60,60,67,.13);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ease: cubic-bezier(.32,.72,0,1);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0; padding: 0; width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+/* ================= 主界面 ================= */
+#mainScreen {
+  position: fixed; inset: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg);
+  transition: transform .38s var(--ease);
+  will-change: transform;
+  z-index: 1;
+}
+#mainScreen.shifted { transform: translateX(-30%); }
+.main-inner { padding: 0 14px calc(40px + var(--safe-bottom)); }
+
+/* 固定标题栏 */
+.page-title {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  margin: 0 -14px 18px;
+  padding: calc(22px + var(--safe-top)) 14px 12px;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: .3px;
+  box-shadow: 0 6px 12px -10px rgba(0,0,0,.12);
+}
+
+/* ===== 双排输入网格 ===== */
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* 沉井编号行：标签 + 输入框 + 记录按钮 */
+.field-inline {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.field-inline .field-label-inline {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  white-space: nowrap;
+  flex: 0 0 auto;
+  padding-left: 2px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  margin-bottom: 5px;
+  padding-left: 2px;
+  line-height: 1.3;
+  min-height: 31px;
+}
+
+/* ===== 统一输入框样式（含沉井编号） ===== */
+.field input,
+.field-inline input {
+  width: 100%;
+  padding: 11px 10px;
+  font-size: 16px;
+  border: 1px solid var(--sep);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--text);
+  outline: none;
+  font-family: inherit;
+  -webkit-user-select: text;
+  user-select: text;
+  transition: border-color .15s, background .15s;
+  text-align: center;
+  min-width: 0;
+}
+.field input:focus,
+.field-inline input:focus { border-color: var(--blue); }
+.field input::placeholder,
+.field-inline input::placeholder { color: #c7c7cc; font-weight: 400; }
+
+/* 自动计算字段 */
+.field input[readonly] {
+  background: #eef4ff;
+  color: var(--blue);
+  font-weight: 700;
+  border-color: #c5dcff;
+}
+.field input[readonly].result-red { color: var(--red); }
+
+/* ===== 记录按钮（沉井编号右侧的正方形按钮） ===== */
+.menu-btn {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background .15s, transform .1s;
+}
+.menu-btn:active { background: var(--blue-press); transform: scale(.94); }
+
+/* 分隔线 */
+.grid-sep {
+  grid-column: 1 / -1;
+  height: 1px;
+  background: var(--sep);
+  margin: 6px 0 2px;
+}
+
+/* 计算按钮 */
+.calc-btn {
+  width: 100%;
+  height: 52px;
+  margin-top: 20px;
+  font-size: 17px;
+  font-weight: 600;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background .15s, transform .1s;
+}
+.calc-btn:active { background: var(--blue-press); transform: scale(.97); }
+
+/* 结果区 */
+.result {
+  margin-top: 18px; background: #fff; border-radius: 12px;
+  padding: 4px 16px 16px; display: none;
+}
+.result.show { display: block; }
+.result h3 {
+  font-size: 15px; font-weight: 700;
+  margin: 16px 0 4px; color: var(--text);
+}
+.result p {
+  font-size: 15px; line-height: 1.75; margin: 7px 0; word-break: break-word;
+}
+.formula {
+  background: #f7f7fa; border-radius: 9px; padding: 10px 12px; margin: 8px 0;
+}
+.formula p { font-size: 13.5px; margin: 4px 0; color: #444; line-height: 1.65; }
+.highlight { color: var(--red); font-weight: 700; }
+
+/* ================= 计算记录窗口 ================= */
+#recordScreen {
+  position: fixed; inset: 0; z-index: 10;
+  background: var(--bg);
+  transform: translateX(100%);
+  transition: transform .38s var(--ease);
+  will-change: transform;
+  display: flex; flex-direction: column;
+}
+#recordScreen.open { transform: translateX(0); }
+
+.nav-bar {
+  position: relative;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(var(--safe-top) + 6px) 6px 8px;
+  min-height: 48px;
+  background: rgba(249,249,249,.94);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: .5px solid var(--sep);
+  flex: 0 0 auto;
+}
+.nav-title {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  margin-top: calc(var(--safe-top) / 2);
+  font-size: 17px; font-weight: 600; pointer-events: none;
+}
+.nav-btn {
+  background: none; border: none;
+  font-size: 17px; color: var(--blue);
+  padding: 9px 10px; cursor: pointer;
+  font-family: inherit;
+  display: flex; align-items: center; gap: 1px;
+  border-radius: 8px;
+  -webkit-user-select: none; user-select: none;
+  transition: opacity .12s;
+}
+.nav-btn:active { opacity: .45; }
+.nav-btn .arrow { font-size: 21px; line-height: 1; margin-right: 1px; }
+.nav-btn.danger { color: var(--red); font-size: 15px; font-weight: 500; }
+
+.record-list-wrap {
+  flex: 1; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 12px calc(30px + var(--safe-bottom));
+}
+.record-list { display: flex; flex-direction: column; gap: 10px; }
+
+.record-item {
+  display: flex; align-items: stretch;
+  background: #fff; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,.05);
+  -webkit-user-select: none; user-select: none;
+}
+.record-main {
+  flex: 1; padding: 12px 6px 12px 14px;
+  cursor: pointer; min-width: 0;
+  transition: background .15s;
+}
+.record-main:active { background: #f0f0f5; }
+.record-name {
+  font-size: 15px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.record-time { font-size: 12px; color: var(--text2); margin-top: 3px; }
+.record-summary {
+  font-size: 13px; color: #555; margin-top: 6px; line-height: 1.5;
+}
+.record-summary b { color: var(--blue); font-weight: 600; }
+
+.record-actions { display: flex; align-items: center; padding-right: 4px; }
+.icon-btn {
+  width: 44px; height: 44px;
+  border: none; background: transparent;
+  font-size: 18px; cursor: pointer; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s, transform .1s;
+}
+.icon-btn:active { background: #eee; transform: scale(.9); }
+
+.empty-state {
+  text-align: center; color: var(--text2);
+  font-size: 14px; padding: 70px 20px; line-height: 2;
+}
+.empty-state .sub { font-size: 13px; color: #bbb; }
+
+/* ================= 自定义弹窗 ================= */
+.modal-mask {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.42);
+  display: flex; align-items: center; justify-content: center;
+  padding: 40px 34px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s;
+  z-index: 1000;
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+.modal-mask.open { opacity: 1; pointer-events: auto; }
+
+.modal {
+  background: #fff; border-radius: 14px;
+  width: 100%; max-width: 290px;
+  padding: 20px 16px 14px;
+  transform: scale(.92);
+  transition: transform .22s var(--ease);
+}
+.modal-mask.open .modal { transform: scale(1); }
+
+.modal-title {
+  font-size: 16px; font-weight: 600; text-align: center;
+  margin-bottom: 16px; line-height: 1.45; word-break: break-all;
+}
+.modal-input {
+  display: none; width: 100%;
+  padding: 10px 12px; font-size: 16px;
+  border: 1px solid #ddd; border-radius: 9px;
+  margin-bottom: 16px; outline: none;
+  font-family: inherit; background: #f7f7fa;
+  -webkit-user-select: text; user-select: text;
+}
+.modal-input:focus { border-color: var(--blue); background: #fff; }
+
+.modal-btns { display: flex; gap: 8px; }
+.modal-btns button {
+  flex: 1; height: 44px;
+  border: none; border-radius: 10px;
+  font-size: 16px; font-weight: 500;
+  cursor: pointer; font-family: inherit;
+  transition: background .15s, transform .1s;
+}
+#modalCancel { background: #f2f2f7; color: var(--blue); }
+#modalCancel:active { background: #e5e5ea; }
+#modalOk { background: var(--blue); color: #fff; }
+#modalOk:active { background: var(--blue-press); transform: scale(.97); }
+
+/* ================= Toast ================= */
+.toast {
+  position: fixed; left: 50%;
+  bottom: calc(60px + var(--safe-bottom));
+  transform: translateX(-50%) translateY(10px);
+  background: rgba(0,0,0,.82); color: #fff;
+  padding: 10px 18px; border-radius: 10px;
+  font-size: 14px; opacity: 0; pointer-events: none;
+  transition: opacity .25s, transform .25s;
+  z-index: 2000; max-width: 80vw; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ================= 主界面 ================= -->
+<div id="mainScreen">
+  <div class="main-inner">
+    <h1 class="page-title">沉井下沉计算器</h1>
+
+    <div class="field-grid">
+
+      <!-- 沉井编号行：标签 + 输入框 + 记录按钮 -->
+      <div class="field-inline">
+        <span class="field-label-inline">沉井编号</span>
+        <input type="text" id="wellNumber" maxlength="20" placeholder="请输入" autocomplete="off">
+        <button class="menu-btn" id="menuBtn" aria-label="计算记录">📋</button>
+      </div>
+
+      <!-- 第 1 排 -->
+      <label class="field">
+        <span class="field-label">设计流水标高 (m)</span>
+        <input type="number" id="designWaterLevel" step="0.001" inputmode="decimal" placeholder="请输入">
+      </label>
+      <label class="field">
+        <span class="field-label">管道壁厚 (m)</span>
+        <input type="number" id="wallThickness" step="0.001" inputmode="decimal" placeholder="请输入">
+      </label>
+
+      <!-- 第 2 排 -->
+      <label class="field">
+        <span class="field-label">洞口底到上口结构高差 (m)</span>
+        <input type="number" id="structureDiff" step="0.001" inputmode="decimal" placeholder="请输入">
+      </label>
+      <label class="field">
+        <span class="field-label">后视点高程 (m)</span>
+        <input type="number" id="backSightElevation" step="0.001" inputmode="decimal" placeholder="请输入">
+      </label>
+
+      <!-- 第 3 排 -->
+      <label class="field">
+        <span class="field-label">水准仪仪高 (m)</span>
+        <input type="number" id="instrumentHeight" step="0.001" inputmode="decimal" placeholder="请输入">
+      </label>
+      <label class="field">
+        <span class="field-label">沉井上口读数 (m)</span>
+        <input type="number" id="topReading" step="0.001" inputmode="decimal" placeholder="请输入">
+      </label>
+
+      <!-- 分隔线 -->
+      <div class="grid-sep"></div>
+
+      <!-- 第 4 排：自动计算 -->
+      <label class="field">
+        <span class="field-label">沉井还需要下沉 (m)</span>
+        <input type="text" id="sinkNeeded" readonly placeholder="—">
+      </label>
+      <label class="field">
+        <span class="field-label">到位时水准仪读数 (m)</span>
+        <input type="text" id="targetReading" readonly placeholder="—">
+      </label>
+
+    </div>
+
+    <button class="calc-btn" id="calcBtn">计算</button>
+
+    <div class="result" id="result"></div>
+  </div>
+</div>
+
+<!-- ================= 计算记录窗口 ================= -->
+<div id="recordScreen">
+  <div class="nav-bar">
+    <button class="nav-btn" id="backBtn">
+      <span class="arrow">‹</span>返回
+    </button>
+    <div class="nav-title">计算记录</div>
+    <button class="nav-btn danger" id="clearAllBtn">清空</button>
+  </div>
+  <div class="record-list-wrap">
+    <div class="record-list" id="recordList"></div>
+  </div>
+</div>
+
+<!-- ================= 自定义弹窗 ================= -->
+<div class="modal-mask" id="modalMask">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle"></div>
+    <input class="modal-input" id="modalInput" type="text" maxlength="40" placeholder="输入名称">
+    <div class="modal-btns">
+      <button id="modalCancel">取消</button>
+      <button id="modalOk">确定</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     1. 全局禁用放大缩小
+     ========================================================= */
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (evt) {
+    document.addEventListener(evt, function (e) { e.preventDefault(); }, { passive: false });
+  });
+  document.addEventListener('touchstart', function (e) {
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('wheel', function (e) {
+    if (e.ctrlKey) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('dblclick', function (e) { e.preventDefault(); }, { passive: false });
+
+  /* =========================================================
+     2. 工具函数
+     ========================================================= */
+  const STORAGE_KEY = 'sinkingWellRecords';
+
+  function loadRecords() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    catch (e) { return []; }
+  }
+  function saveRecords(records) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(records)); }
+    catch (e) { showToast('保存失败：存储空间不足'); }
+  }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function formatTime(date) {
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
+           ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+  }
+  function formatFullTime(date) {
+    return formatTime(date) + ':' + pad(date.getSeconds());
+  }
+  function escapeHtml(str) {
+    return String(str == null ? '' : str).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  let toastTimer = null;
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 1800);
+  }
+  function f(num) { return num.toFixed(3); }
+
+  /* =========================================================
+     3. 自定义弹窗
+     ========================================================= */
+  function openModal(opts) {
+    return new Promise(function (resolve) {
+      const mask      = document.getElementById('modalMask');
+      const titleEl   = document.getElementById('modalTitle');
+      const inputEl   = document.getElementById('modalInput');
+      const okBtn     = document.getElementById('modalOk');
+      const cancelBtn = document.getElementById('modalCancel');
+
+      titleEl.textContent = opts.title || '';
+
+      if (opts.type === 'input') {
+        inputEl.style.display = 'block';
+        inputEl.value = opts.defaultValue || '';
+      } else {
+        inputEl.style.display = 'none';
+        inputEl.value = '';
+      }
+
+      mask.classList.add('open');
+
+      if (opts.type === 'input') {
+        setTimeout(function () {
+          try { inputEl.focus(); } catch (e) {}
+        }, 120);
+      }
+
+      okBtn.onclick = function () {
+        const val = (opts.type === 'input') ? inputEl.value : true;
+        mask.classList.remove('open');
+        resolve(val);
+      };
+      cancelBtn.onclick = function () {
+        mask.classList.remove('open');
+        resolve(null);
+      };
+      inputEl.onkeydown = function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); okBtn.click(); }
+      };
+    });
+  }
+
+  /* =========================================================
+     4. 读取输入 / 计算
+     ========================================================= */
+  function getInputs() {
+    return {
+      wellNumber        : document.getElementById('wellNumber').value.trim(),
+      designWaterLevel  : parseFloat(document.getElementById('designWaterLevel').value),
+      wallThickness     : parseFloat(document.getElementById('wallThickness').value),
+      structureDiff     : parseFloat(document.getElementById('structureDiff').value),
+      backSightElevation: parseFloat(document.getElementById('backSightElevation').value),
+      instrumentHeight  : parseFloat(document.getElementById('instrumentHeight').value),
+      topReading        : parseFloat(document.getElementById('topReading').value)
+    };
+  }
+
+  // 输入数据快照（含沉井编号，用于判断是否有任何输入变化）
+  function snapshotOf(data) {
+    return [
+      data.wellNumber,
+      data.designWaterLevel,
+      data.wallThickness,
+      data.structureDiff,
+      data.backSightElevation,
+      data.instrumentHeight,
+      data.topReading
+    ].join('|');
+  }
+
+  let lastSavedSnapshot = null;
+
+  function compute(data) {
+    const bottomDesignElevation  = data.designWaterLevel - data.wallThickness;
+    const currentTopElevation    = data.instrumentHeight - data.topReading;
+    const currentBottomElevation = currentTopElevation - data.structureDiff;
+    const sinkNeeded             = currentBottomElevation - bottomDesignElevation;
+    const targetTopElevation     = bottomDesignElevation + data.structureDiff;
+    const targetReading          = data.instrumentHeight - targetTopElevation;
+    const backSightReading       = data.instrumentHeight - data.backSightElevation;
+
+    return {
+      bottomDesignElevation : bottomDesignElevation,
+      currentTopElevation   : currentTopElevation,
+      currentBottomElevation: currentBottomElevation,
+      sinkNeeded            : sinkNeeded,
+      targetTopElevation    : targetTopElevation,
+      targetReading         : targetReading,
+      backSightReading      : backSightReading
+    };
+  }
+
+  function isValid(data) {
+    return !isNaN(data.designWaterLevel) &&
+           !isNaN(data.wallThickness) &&
+           !isNaN(data.structureDiff) &&
+           !isNaN(data.instrumentHeight) &&
+           !isNaN(data.topReading);
+  }
+
+  /* =========================================================
+     5. 实时刷新自动计算字段
+     ========================================================= */
+  function refreshAutoFields() {
+    const data = getInputs();
+    const sinkEl = document.getElementById('sinkNeeded');
+    const readEl = document.getElementById('targetReading');
+
+    if (!isValid(data)) {
+      sinkEl.value = '';
+      readEl.value = '';
+      sinkEl.classList.remove('result-red');
+      readEl.classList.remove('result-red');
+      return;
+    }
+
+    const r = compute(data);
+    sinkEl.value = f(r.sinkNeeded);
+    readEl.value = f(r.targetReading);
+    sinkEl.classList.add('result-red');
+    readEl.classList.add('result-red');
+  }
+
+  /* =========================================================
+     6. 记录渲染
+     ========================================================= */
+  function renderRecords() {
+    const records = loadRecords();
+    const list = document.getElementById('recordList');
+
+    if (!records.length) {
+      list.innerHTML =
+        '<div class="empty-state">暂无计算记录<div class="sub">点击主界面「计算」后会自动保存</div></div>';
+      return;
+    }
+
+    list.innerHTML = records.map(function (r) {
+      const sink = (r.sinkNeeded != null) ? Number(r.sinkNeeded).toFixed(3) : '—';
+      const read = (r.targetReading != null) ? Number(r.targetReading).toFixed(3) : '—';
+      return '' +
+        '<div class="record-item" data-id="' + r.id + '">' +
+          '<div class="record-main">' +
+            '<div class="record-name">' + escapeHtml(r.name) + '</div>' +
+            '<div class="record-time">' + formatTime(new Date(r.time)) + '</div>' +
+            '<div class="record-summary">需下沉 <b>' + sink + '</b> m ｜ 到位读数 <b>' + read + '</b> m</div>' +
+          '</div>' +
+          '<div class="record-actions">' +
+            '<button class="icon-btn" data-action="rename" aria-label="重命名">✏️</button>' +
+            '<button class="icon-btn" data-action="delete" aria-label="删除">🗑️</button>' +
+          '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  /* =========================================================
+     7. 记录操作
+     ========================================================= */
+  async function renameRecord(id) {
+    const records = loadRecords();
+    const rec = records.find(function (r) { return r.id === id; });
+    if (!rec) return;
+
+    const newName = await openModal({
+      title: '重命名记录',
+      type: 'input',
+      defaultValue: rec.name
+    });
+    if (newName === null) return;
+
+    const trimmed = String(newName).trim();
+    if (!trimmed) { showToast('名称不能为空'); return; }
+    if (trimmed.length > 40) { showToast('名称最多 40 个字'); return; }
+
+    rec.name = trimmed;
+    saveRecords(records);
+    renderRecords();
+    showToast('已重命名');
+  }
+
+  async function deleteRecord(id) {
+    const records = loadRecords();
+    const rec = records.find(function (r) { return r.id === id; });
+    if (!rec) return;
+
+    const ok = await openModal({ title: '确定删除「' + rec.name + '」？' });
+    if (!ok) return;
+
+    saveRecords(records.filter(function (r) { return r.id !== id; }));
+    renderRecords();
+    showToast('已删除');
+  }
+
+  async function clearAll() {
+    const records = loadRecords();
+    if (!records.length) { showToast('暂无记录'); return; }
+
+    const ok = await openModal({ title: '确定清空全部 ' + records.length + ' 条记录？' });
+    if (!ok) return;
+
+    saveRecords([]);
+    renderRecords();
+    showToast('已清空全部记录');
+  }
+
+  function loadRecord(id) {
+    const records = loadRecords();
+    const rec = records.find(function (r) { return r.id === id; });
+    if (!rec) return;
+
+    document.getElementById('wellNumber').value          = rec.wellNumber || '';
+    document.getElementById('designWaterLevel').value    = rec.designWaterLevel;
+    document.getElementById('wallThickness').value       = rec.wallThickness;
+    document.getElementById('structureDiff').value       = rec.structureDiff;
+    document.getElementById('backSightElevation').value  = rec.backSightElevation;
+    document.getElementById('instrumentHeight').value    = rec.instrumentHeight;
+    document.getElementById('topReading').value          = rec.topReading;
+
+    const loadedData = getInputs();
+    lastSavedSnapshot = snapshotOf(loadedData);
+
+    refreshAutoFields();
+    closeRecordScreen();
+    showResult(true);
+    showToast('已载入：' + rec.name);
+  }
+
+  function addRecord(data, result) {
+    const records = loadRecords();
+    const now = new Date();
+    const timeStr = formatFullTime(now);
+
+    // 记录名称格式：编号：***；记录时间：***
+    // 若编号为空，用 Untitled 代替
+    const numberForName = data.wellNumber ? data.wellNumber : 'Untitled';
+    const name = '编号：' + numberForName + '；记录时间：' + timeStr;
+
+    records.unshift({
+      id: 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      name: name,
+      time: now.getTime(),
+      wellNumber        : data.wellNumber,
+      designWaterLevel  : data.designWaterLevel,
+      wallThickness     : data.wallThickness,
+      structureDiff     : data.structureDiff,
+      backSightElevation: data.backSightElevation,
+      instrumentHeight  : data.instrumentHeight,
+      topReading        : data.topReading,
+      sinkNeeded        : result.sinkNeeded,
+      targetReading     : result.targetReading
+    });
+    saveRecords(records);
+    renderRecords();
+    lastSavedSnapshot = snapshotOf(data);
+  }
+
+  /* =========================================================
+     8. 窗口切换动画
+     ========================================================= */
+  function openRecordScreen() {
+    renderRecords();
+    document.getElementById('recordScreen').classList.add('open');
+    document.getElementById('mainScreen').classList.add('shifted');
+  }
+  function closeRecordScreen() {
+    document.getElementById('recordScreen').classList.remove('open');
+    document.getElementById('mainScreen').classList.remove('shifted');
+  }
+
+  /* =========================================================
+     9. 结果显示
+     ========================================================= */
+  function showResult(isFromRecord) {
+    const data = getInputs();
+    const resultEl = document.getElementById('result');
+
+    if (!isValid(data)) {
+      resultEl.classList.add('show');
+      resultEl.innerHTML = '<p style="color:var(--red);padding:12px 0;">请输入有效的数字！</p>';
+      return;
+    }
+
+    const r = compute(data);
+
+    const titleHtml = data.wellNumber
+      ? '<h3>沉井编号：' + escapeHtml(data.wellNumber) + '</h3>'
+      : '';
+
+    resultEl.innerHTML =
+      titleHtml +
+      '<h3>一、计算公式</h3>' +
+      '<div class="formula">' +
+        '<p>1. 洞口底设计标高 = 设计流水标高 − 管道壁厚</p>' +
+        '<p>2. 当前沉井上口标高 = 水准仪仪高 − 沉井上口读数</p>' +
+        '<p>3. 当前沉井洞口底标高 = 当前沉井上口标高 − 洞口底到上口结构高差</p>' +
+        '<p>4. 沉井还需要下沉 = 当前沉井洞口底标高 − 洞口底设计标高</p>' +
+        '<p>5. 到位时沉井上口标高 = 洞口底设计标高 + 洞口底到上口结构高差</p>' +
+        '<p>6. 到位时水准仪读数 = 水准仪仪高 − 到位时沉井上口标高</p>' +
+      '</div>' +
+
+      '<h3>二、代入计算</h3>' +
+      '<p>1. 洞口底设计标高 = ' + f(data.designWaterLevel) + ' − ' + f(data.wallThickness) + ' = <span class="highlight">' + f(r.bottomDesignElevation) + ' m</span></p>' +
+      '<p>2. 当前沉井上口标高 = ' + f(data.instrumentHeight) + ' − ' + f(data.topReading) + ' = ' + f(r.currentTopElevation) + ' m</p>' +
+      '<p>3. 当前沉井洞口底标高 = ' + f(r.currentTopElevation) + ' − ' + f(data.structureDiff) + ' = ' + f(r.currentBottomElevation) + ' m</p>' +
+      '<p>4. 沉井还需要下沉 = ' + f(r.currentBottomElevation) + ' − ' + f(r.bottomDesignElevation) + ' = <span class="highlight">' + f(r.sinkNeeded) + ' m</span></p>' +
+      '<p>5. 到位时沉井上口标高 = ' + f(r.bottomDesignElevation) + ' + ' + f(data.structureDiff) + ' = ' + f(r.targetTopElevation) + ' m</p>' +
+      '<p>6. 到位时水准仪读数 = ' + f(data.instrumentHeight) + ' − ' + f(r.targetTopElevation) + ' = <span class="highlight">' + f(r.targetReading) + ' m</span></p>' +
+
+      '<h3>三、结论</h3>' +
+      '<p class="highlight">沉井还需要下沉：' + f(r.sinkNeeded) + ' m</p>' +
+      '<p class="highlight">下沉到位时水准仪读数应为：' + f(r.targetReading) + ' m</p>' +
+      '<p>也就是说，当沉井上口的水准仪读数从现在的 ' + f(data.topReading) + ' 变成 ' + f(r.targetReading) +
+        ' 时，沉井洞口底就达到设计标高 ' + f(r.bottomDesignElevation) + '。</p>' +
+
+      '<h3>四、参考信息</h3>' +
+      '<div class="formula">' +
+        '<p>后视点高程：' + f(data.backSightElevation) + ' m</p>' +
+        '<p>后视读数 = 水准仪仪高 − 后视点高程 = ' + f(data.instrumentHeight) + ' − ' + f(data.backSightElevation) + ' = ' + f(r.backSightReading) + ' m</p>' +
+      '</div>';
+
+    resultEl.classList.add('show');
+
+    if (isFromRecord) return;
+
+    const snap = snapshotOf(data);
+    if (lastSavedSnapshot !== null && snap === lastSavedSnapshot) {
+      return;
+    }
+    addRecord(data, r);
+  }
+
+  /* =========================================================
+     10. 事件绑定
+     ========================================================= */
+  document.getElementById('calcBtn').addEventListener('click', function () { showResult(false); });
+  document.getElementById('menuBtn').addEventListener('click', openRecordScreen);
+  document.getElementById('backBtn').addEventListener('click', closeRecordScreen);
+  document.getElementById('clearAllBtn').addEventListener('click', clearAll);
+
+  ['designWaterLevel', 'wallThickness', 'structureDiff', 'backSightElevation', 'instrumentHeight', 'topReading']
+    .forEach(function (id) {
+      document.getElementById(id).addEventListener('input', refreshAutoFields);
+    });
+
+  document.getElementById('recordList').addEventListener('click', function (e) {
+    const item = e.target.closest('.record-item');
+    if (!item) return;
+    const id = item.dataset.id;
+
+    const actionBtn = e.target.closest('[data-action]');
+    if (actionBtn) {
+      e.stopPropagation();
+      const action = actionBtn.dataset.action;
+      if (action === 'rename') renameRecord(id);
+      else if (action === 'delete') deleteRecord(id);
+      return;
+    }
+    loadRecord(id);
+  });
+
+  /* =========================================================
+     11. 初始化
+     ========================================================= */
+  refreshAutoFields();
+  renderRecords();
+
+})();
+</script>
+</body>
+</html>
